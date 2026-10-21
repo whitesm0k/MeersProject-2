@@ -79,6 +79,18 @@ async def on_ready():
     await bot.tree.sync()  # <-- ИЗМЕНЕНО
     bot.add_view(TicketView(products=PRODUCTS))
 
+@bot.event
+async def on_ready():
+    print(f'Бот запущен как {bot.user}')
+    # Вариант 1: глобальная синхронизация (до 1 часа появления)
+    # await bot.tree.sync()
+    
+    # Вариант 2: мгновенная синхронизация для конкретного сервера (рекомендуется)
+    await bot.tree.sync(guild=discord.Object(id=1547655055673663619))  # <-- заменить на ID вашего сервера
+    
+    bot.add_view(TicketView(products=PRODUCTS))
+
+
 
 @bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")  # <-- ИЗМЕНЕНО
 @app_commands.checks.has_permissions(administrator=True)
