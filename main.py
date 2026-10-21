@@ -3,14 +3,27 @@ import os
 from discord import app_commands, ui
 from discord.ext import commands
 
+# --- НАСТРОЙКИ (АВТОМАТИЧЕСКОЕ ЧТЕНИЕ С ХОСТИНГА) ---
+
+# Получаем ID канала. Если переменной нет или она пустая — ставим 0.
+raw_channel_id = os.getenv("CHANNEL_ID", "0")
+try:
+    CHANNEL_ID = int(raw_channel_id)
+except ValueError:
+    print("⚠️ CHANNEL_ID не является числом. Устанавливаем в 0.")
+    CHANNEL_ID = 0
+
+# Получаем токен
+TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise ValueError("❌ Критическая ошибка: Переменная окружения BOT_TOKEN не найдена!")
+
+PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
-
-# ВАЖНО: замените на ID канала (число, без кавычек)
-CHANNEL_ID = " "   
-
-PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 
 class TicketModal(ui.Modal, title="Создание тикета"):
     def __init__(self, product_options):
@@ -47,20 +60,25 @@ class TicketModal(ui.Modal, title="Создание тикета"):
             interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
         }
         channel_name = f"ticket-{interaction.user.name}"
-        ticket_channel = await interaction.guild.create_text_channel(
-            name=channel_name,
-            overwrites=overwrites,
-            category=None
-        )
-        embed = discord.Embed(title="Новый тикет", color=discord.Color.blue())
-        embed.add_field(name="Пользователь", value=interaction.user.mention, inline=False)
-        embed.add_field(name="Тип обращения", value=category, inline=False)
-        embed.add_field(name="Продукт", value=product, inline=False)
-        embed.add_field(name="Комментарий", value=comment, inline=False)
-        embed.set_footer(text=f"ID тикета: {ticket_channel.id}")
-        await ticket_channel.send(embed=embed)
-        await interaction.response.send_message(f"Тикет создан: {ticket_channel.mention}", ephemeral=True)
-
+        try:
+            ticket_channel = await interaction.guild.create_text_channel(
+                name=channel_name,
+                overwrites=overwrites,
+                category=None
+            )
+            embed = discord.Embed(title="Новый тикет", color=discord.Color.blue())
+            embed.add_field(name="Пользователь", value=interaction.user.mention, inline=False)
+            embed.add_field(name="Тип обращения", value=category, inline=False)
+            embed.add_field(name="Продукт", value=product, inline=False)
+            embed.add_field(name="Комментарий", value=comment, inline=False)
+            embed.set_footer(text=f"ID тикета: {ticket_channel.id}")
+            
+            await ticket_channel.send(embed=embed)
+            await interaction.response.send_message(f"Тикет создан: {ticket_channel.mention}", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ У бота нет прав на создание каналов. Проверьте права роли бота.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ошибка создания тикета: {e}", ephemeral=True)
 
 class TicketView(ui.View):
     def __init__(self, products):
@@ -78,39 +96,48 @@ class TicketView(ui.View):
         modal = TicketModal(product_options=self.products)
         await interaction.response.send_modal(modal)
 
-
 @bot.event
 async def on_ready():
     print(f'Бот запущен как {bot.user}')
     
-    # Синхронизация команд для конкретного сервера
-    await bot.tree.sync(guild=discord.Object(id=1547655055673663619))
+    # Безопасная синхронизация команд
+    try:
+        # ВАЖНО: Если бот должен работать ТОЛЬКО на одном сервере, оставь эту строку:
+        synced = await bot.tree.sync(guild=discord.Object(id=1547655055673663619))
+        
+        # Если бот должен работать на НЕСКОЛЬКИХ серверах, раскомментируй строку ниже и закомментируй строку выше:
+        # synced = await bot.tree.sync()
+        
+        print(f"✅ Синхронизировано команд: {len(synced)}")
+    except Exception as e:
+        print(f"⚠️ Ошибка синхронизации команд: {e}")
     
-    # Создаем один экземпляр View для регистрации и отправки
     view = TicketView(products=PRODUCTS)
     bot.add_view(view)
     
-    # Получаем канал
-    channel = bot.get_channel(CHANNEL_ID)
-    print(f"Попытка отправки кнопки: CHANNEL_ID={CHANNEL_ID}, канал={channel}")
-    
-    if channel:
-        welcome_text = (
-            "Добро пожаловать! Нажмите кнопку ниже, чтобы написать тикет Тех.Поддержке с вопросом, "
-            "проблемой или покупкой.\n\n"
-            "**Важное примечание:** Не оставляйте оффтоп тикет, не агрессируйте на администрацию, "
-            "не пишите тикет в шуточной форме. Спасибо!"
-        )
-        try:
-            await channel.send(content=welcome_text, view=view)
-            print(f"✅ Кнопка успешно отправлена в канал #{channel.name} (ID: {channel.id})")
-        except discord.Forbidden:
-            print(f"❌ Ошибка: У бота нет прав на отправку сообщений в канал #{channel.name}")
-        except Exception as e:
-            print(f"❌ Произошла ошибка при отправке кнопки: {e}")
+    # Проверка CHANNEL_ID: он должен быть int и не равен 0
+    if isinstance(CHANNEL_ID, int) and CHANNEL_ID != 0:
+        channel = bot.get_channel(CHANNEL_ID)
+        print(f"Попытка отправки кнопки: CHANNEL_ID={CHANNEL_ID}, канал={channel}")
+        
+        if channel:
+            welcome_text = (
+                "Добро пожаловать! Нажмите кнопку ниже, чтобы написать тикет Тех.Поддержке с вопросом, "
+                "проблемой или покупкой.\n\n"
+                "**Важное примечание:** Не оставляйте оффтоп тикет, не агрессируйте на администрацию, "
+                "не пишите тикет в шуточной форме. Спасибо!"
+            )
+            try:
+                await channel.send(content=welcome_text, view=view)
+                print(f"✅ Кнопка успешно отправлена в канал #{channel.name} (ID: {channel.id})")
+            except discord.Forbidden:
+                print(f"❌ Ошибка: У бота нет прав на отправку сообщений в канал #{channel.name}")
+            except Exception as e:
+                print(f"❌ Произошла ошибка при отправке кнопки: {e}")
+        else:
+            print(f"❌ Ошибка: Канал с ID {CHANNEL_ID} не найден. Проверьте ID и права бота.")
     else:
-        print(f"❌ Ошибка: Канал с ID {CHANNEL_ID} не найден. Проверьте ID и права бота.")
-
+        print("⚠️ CHANNEL_ID не задан (0 или не число). Кнопка не будет отправлена автоматически. Используйте команду /sendticketbtn")
 
 @bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")
 @app_commands.checks.has_permissions(administrator=True)
@@ -124,6 +151,4 @@ async def send_ticket_btn(interaction: discord.Interaction):
     view = TicketView(products=PRODUCTS)
     await interaction.response.send_message(content=welcome_text, view=view)
 
-
-TOKEN = os.getenv("BOT_TOKEN")
 bot.run(TOKEN)
