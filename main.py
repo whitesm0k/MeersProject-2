@@ -8,7 +8,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # ВАЖНО: замените на ID канала (число, без кавычек)
-CHANNEL_ID =   
+CHANNEL_ID = " "   
 
 PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 
