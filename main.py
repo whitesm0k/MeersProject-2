@@ -5,7 +5,6 @@ from discord.ext import commands
 
 # --- НАСТРОЙКИ (АВТОМАТИЧЕСКОЕ ЧТЕНИЕ С ХОСТИНГА) ---
 
-# Получаем ID канала. Если переменной нет или она пустая — ставим 0.
 raw_channel_id = os.getenv("CHANNEL_ID", "0")
 try:
     CHANNEL_ID = int(raw_channel_id)
@@ -13,7 +12,6 @@ except ValueError:
     print("⚠️ CHANNEL_ID не является числом. Устанавливаем в 0.")
     CHANNEL_ID = 0
 
-# Получаем токен
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
@@ -24,6 +22,29 @@ PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+class TicketView(ui.View):
+    def __init__(self, products):
+        super().__init__(timeout=None)
+        self.products = products
+        button = ui.Button(
+            label="📩 Создать обращение",
+            style=discord.ButtonStyle.blurple,
+            custom_id="create_ticket_btn"
+        )
+        button.callback = self.create_ticket
+        self.add_item(button)
+
+    async def create_ticket(self, interaction: discord.Interaction):
+        # Сообщаем Discord, что бот обрабатывает запрос (защита от таймаута)
+        await interaction.response.defer(ephemeral=True)
+        
+        # Создаем модальное окно
+        modal = TicketModal(product_options=self.products)
+        
+        # ВАЖНО: Модальные окна отправляются ТОЛЬКО через response.send_modal
+        await interaction.followup.send_modal(modal)
+
 
 class TicketModal(ui.Modal, title="Создание тикета"):
     def __init__(self, product_options):
@@ -50,8 +71,9 @@ class TicketModal(ui.Modal, title="Создание тикета"):
         self.add_item(self.comment_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        category = self.category_select.values
-        product = self.product_select.values
+        # Защита от пустых значений (на случай ошибок)
+        category = self.category_select.values if self.category_select.values else "Не указано"
+        product = self.product_select.values if self.product_select.values else "Не указано"
         comment = self.comment_input.value if self.comment_input.value else "Без комментария"
 
         overwrites = {
@@ -60,6 +82,7 @@ class TicketModal(ui.Modal, title="Создание тикета"):
             interaction.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True)
         }
         channel_name = f"ticket-{interaction.user.name}"
+        
         try:
             ticket_channel = await interaction.guild.create_text_channel(
                 name=channel_name,
@@ -74,40 +97,23 @@ class TicketModal(ui.Modal, title="Создание тикета"):
             embed.set_footer(text=f"ID тикета: {ticket_channel.id}")
             
             await ticket_channel.send(embed=embed)
-            await interaction.response.send_message(f"Тикет создан: {ticket_channel.mention}", ephemeral=True)
+            
+            # Используем followup, так как response уже был использован при открытии модалки
+            await interaction.followup.send(f"Тикет создан: {ticket_channel.mention}", ephemeral=True)
+            
         except discord.Forbidden:
-            await interaction.response.send_message("❌ У бота нет прав на создание каналов. Проверьте права роли бота.", ephemeral=True)
+            await interaction.followup.send("❌ У бота нет прав на создание каналов. Проверьте права роли бота.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Ошибка создания тикета: {e}", ephemeral=True)
-
-class TicketView(ui.View):
-    def __init__(self, products):
-        super().__init__(timeout=None)
-        self.products = products
-        button = ui.Button(
-            label="📩 Создать обращение",
-            style=discord.ButtonStyle.blurple,
-            custom_id="create_ticket_btn"
-        )
-        button.callback = self.create_ticket
-        self.add_item(button)
-
-    async def create_ticket(self, interaction: discord.Interaction):
-        modal = TicketModal(product_options=self.products)
-        await interaction.response.send_modal(modal)
+            # ИСПРАВЛЕНО: добавлен правильный отступ
+            await interaction.followup.send(f"❌ Ошибка создания тикета: {e}", ephemeral=True)
 
 @bot.event
 async def on_ready():
     print(f'Бот запущен как {bot.user}')
     
-    # Безопасная синхронизация команд
     try:
-        # ВАЖНО: Если бот должен работать ТОЛЬКО на одном сервере, оставь эту строку:
+        # Синхронизация команд (оставьте guild=... для одного сервера, или раскомментируйте sync() для всех)
         synced = await bot.tree.sync(guild=discord.Object(id=1547655055673663619))
-        
-        # Если бот должен работать на НЕСКОЛЬКИХ серверах, раскомментируй строку ниже и закомментируй строку выше:
-        # synced = await bot.tree.sync()
-        
         print(f"✅ Синхронизировано команд: {len(synced)}")
     except Exception as e:
         print(f"⚠️ Ошибка синхронизации команд: {e}")
@@ -115,7 +121,6 @@ async def on_ready():
     view = TicketView(products=PRODUCTS)
     bot.add_view(view)
     
-    # Проверка CHANNEL_ID: он должен быть int и не равен 0
     if isinstance(CHANNEL_ID, int) and CHANNEL_ID != 0:
         channel = bot.get_channel(CHANNEL_ID)
         print(f"Попытка отправки кнопки: CHANNEL_ID={CHANNEL_ID}, канал={channel}")
@@ -129,15 +134,15 @@ async def on_ready():
             )
             try:
                 await channel.send(content=welcome_text, view=view)
-                print(f"✅ Кнопка успешно отправлена в канал #{channel.name} (ID: {channel.id})")
+                print(f"✅ Кнопка успешно отправлена в канал #{channel.name}")
             except discord.Forbidden:
                 print(f"❌ Ошибка: У бота нет прав на отправку сообщений в канал #{channel.name}")
             except Exception as e:
                 print(f"❌ Произошла ошибка при отправке кнопки: {e}")
         else:
-            print(f"❌ Ошибка: Канал с ID {CHANNEL_ID} не найден. Проверьте ID и права бота.")
+            print(f"❌ Ошибка: Канал с ID {CHANNEL_ID} не найден.")
     else:
-        print("⚠️ CHANNEL_ID не задан (0 или не число). Кнопка не будет отправлена автоматически. Используйте команду /sendticketbtn")
+        print("⚠️ CHANNEL_ID не задан. Кнопка не будет отправлена автоматически.")
 
 @bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")
 @app_commands.checks.has_permissions(administrator=True)
