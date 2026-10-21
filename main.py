@@ -6,7 +6,6 @@ from discord.ext import commands
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
-# tree = app_commands.CommandTree(bot)  <-- УДАЛЕНО
 
 PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 
@@ -64,7 +63,12 @@ class TicketView(ui.View):
     def __init__(self, products):
         super().__init__(timeout=None)
         self.products = products
-        button = ui.Button(label="📩 Создать обращение", style=discord.ButtonStyle.blurple)
+        # <-- ДОБАВЛЕНО custom_id для persistent view
+        button = ui.Button(
+            label="📩 Создать обращение",
+            style=discord.ButtonStyle.blurple,
+            custom_id="create_ticket_btn"
+        )
         button.callback = self.create_ticket
         self.add_item(button)
 
@@ -76,30 +80,20 @@ class TicketView(ui.View):
 @bot.event
 async def on_ready():
     print(f'Бот запущен как {bot.user}')
-    await bot.tree.sync()  # <-- ИЗМЕНЕНО
-    bot.add_view(TicketView(products=PRODUCTS))
-
-@bot.event
-async def on_ready():
-    print(f'Бот запущен как {bot.user}')
-    # Вариант 1: глобальная синхронизация (до 1 часа появления)
-    # await bot.tree.sync()
-    
-    # Вариант 2: мгновенная синхронизация для конкретного сервера (рекомендуется)
-    await bot.tree.sync(guild=discord.Object(id=1547655055673663619))  # <-- заменить на ID вашего сервера
-    
+    # Синхронизация ТОЛЬКО для вашего сервера (мгновенное появление команды)
+    # ЗАМЕНИТЕ 1547655055673663619 на ID вашего сервера
+    await bot.tree.sync(guild=discord.Object(id=1547655055673663619))
     bot.add_view(TicketView(products=PRODUCTS))
 
 
-
-@bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")  # <-- ИЗМЕНЕНО
+@bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")
 @app_commands.checks.has_permissions(administrator=True)
 async def send_ticket_btn(interaction: discord.Interaction):
     welcome_text = (
         "Добро пожаловать! Нажмите кнопку ниже, чтобы написать тикет Тех.Поддержке с вопросом, "
         "проблемой или покупкой.\n\n"
-        "**Важное примечание:** Не оставляйте оффтоп тикет, Не агрессируйте на администрацию, "
-        "Не пишите тикет в шуточной форме. Спасибо!"
+        "**Важное примечание:** Не оставляйте оффтоп тикет, не агрессируйте на администрацию, "
+        "не пишите тикет в шуточной форме. Спасибо!"
     )
     view = TicketView(products=PRODUCTS)
     await interaction.response.send_message(content=welcome_text, view=view)
