@@ -6,7 +6,7 @@ from discord.ext import commands
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
-tree = app_commands.CommandTree(bot)  # <-- добавлено
+# tree = app_commands.CommandTree(bot)  <-- УДАЛЕНО
 
 PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 
@@ -76,11 +76,11 @@ class TicketView(ui.View):
 @bot.event
 async def on_ready():
     print(f'Бот запущен как {bot.user}')
-    await tree.sync()  # <-- добавлено
+    await bot.tree.sync()  # <-- ИЗМЕНЕНО
     bot.add_view(TicketView(products=PRODUCTS))
 
 
-@tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")  # <-- заменено
+@bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")  # <-- ИЗМЕНЕНО
 @app_commands.checks.has_permissions(administrator=True)
 async def send_ticket_btn(interaction: discord.Interaction):
     welcome_text = (
