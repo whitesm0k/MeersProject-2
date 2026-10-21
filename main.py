@@ -7,6 +7,9 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# ID канала, куда нужно отправить кнопку (замените на свой)
+CHANNEL_ID = 1547655055673663619 
+
 PRODUCTS = ["MeersExternal", "MeersMacro", "Другой"]
 
 class TicketModal(ui.Modal, title="Создание тикета"):
@@ -63,7 +66,6 @@ class TicketView(ui.View):
     def __init__(self, products):
         super().__init__(timeout=None)
         self.products = products
-        # <-- ДОБАВЛЕНО custom_id для persistent view
         button = ui.Button(
             label="📩 Создать обращение",
             style=discord.ButtonStyle.blurple,
@@ -80,10 +82,31 @@ class TicketView(ui.View):
 @bot.event
 async def on_ready():
     print(f'Бот запущен как {bot.user}')
-    # Синхронизация ТОЛЬКО для вашего сервера (мгновенное появление команды)
-    # ЗАМЕНИТЕ 1547655055673663619 на ID вашего сервера
+    
+    # Синхронизация команд для конкретного сервера
     await bot.tree.sync(guild=discord.Object(id=1547655055673663619))
+    
+    # Регистрация persistent view
     bot.add_view(TicketView(products=PRODUCTS))
+    
+    # Автоматическая отправка кнопки в канал
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        welcome_text = (
+            "Добро пожаловать! Нажмите кнопку ниже, чтобы написать тикет Тех.Поддержке с вопросом, "
+            "проблемой или покупкой.\n\n"
+            "**Важное примечание:** Не оставляйте оффтоп тикет, не агрессируйте на администрацию, "
+            "не пишите тикет в шуточной форме. Спасибо!"
+        )
+        try:
+            await channel.send(content=welcome_text, view=TicketView(products=PRODUCTS))
+            print(f"Кнопка успешно отправлена в канал #{channel.name}")
+        except discord.Forbidden:
+            print(f"Ошибка: У бота нет прав на отправку сообщений в канал #{channel.name}")
+        except Exception as e:
+            print(f"Произошла ошибка при отправке кнопки: {e}")
+    else:
+        print(f"Ошибка: Канал с ID {CHANNEL_ID} не найден. Проверьте ID и права бота.")
 
 
 @bot.tree.command(name="sendticketbtn", description="Отправить кнопку создания тикета в текущий канал")
