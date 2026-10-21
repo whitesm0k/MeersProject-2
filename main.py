@@ -36,14 +36,16 @@ class TicketView(ui.View):
         self.add_item(button)
 
     async def create_ticket(self, interaction: discord.Interaction):
-        # Сообщаем Discord, что бот обрабатывает запрос (защита от таймаута)
+        # 1. Сообщаем Discord, что работаем (чтобы не было таймаута)
         await interaction.response.defer(ephemeral=True)
         
-        # Создаем модальное окно
+        # 2. Создаем модальное окно
         modal = TicketModal(product_options=self.products)
         
-        # ВАЖНО: Модальные окна отправляются ТОЛЬКО через response.send_modal
-        await interaction.followup.send_modal(modal)
+        # 3. ВАЖНО: Отправляем модалку ТОЛЬКО через response.send_modal()
+        # Мы не можем использовать followup.send_modal()
+        await interaction.response.send_modal(modal)
+
 
 
 class TicketModal(ui.Modal, title="Создание тикета"):
